@@ -298,8 +298,7 @@ export default function Queue({ roomId }: QueueProps) {
                         return (
                             <div
                                 key={item.id}
-                                className={`queue-item ${isActive ? 'active' : ''}`}
-                                onClick={() => handleSelectVideo(index)}
+                                className={`queue-item ${isActive ? 'active' : ''} cursor-default`}
                             >
                                 {/* Position Number */}
                                 <span className="w-6 text-center text-sm text-gray-500 flex-shrink-0">

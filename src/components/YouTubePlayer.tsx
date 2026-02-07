@@ -49,7 +49,7 @@ interface YouTubePlayerProps {
 
 export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
     const { state, dispatch, currentVideo, nextVideo } = useRoom();
-    const { sendPlayerAction, onPlayerSync } = useSocket(roomId);
+    const { sendPlayerAction, onPlayerSync, voteNext } = useSocket(roomId);
     const playerRef = useRef<YTPlayer | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isReady, setIsReady] = useState(false);
@@ -57,7 +57,9 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const isLocalActionRef = useRef(false);
-    const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Calculate if local user has voted
+    const hasVoted = state.localParticipant ? state.votes.includes(state.localParticipant.id) : false;
 
     // Load YouTube IFrame API
     useEffect(() => {
@@ -95,10 +97,11 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
             videoId: currentVideo?.videoId || '',
             playerVars: {
                 autoplay: 0,
-                controls: 1,
+                controls: 0, // Disable controls
+                disablekb: 1, // Disable keyboard controls
                 modestbranding: 1,
                 rel: 0,
-                fs: 1,
+                fs: 0, // Disable fullscreen button (since we have custom overlay)
                 playsinline: 1,
                 enablejsapi: 1,
                 origin: typeof window !== 'undefined' ? window.location.origin : '',
@@ -127,11 +130,9 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
             setDuration(player.getDuration());
         }
 
-        // Handle video ended
+        // Handle video ended - REMOVED auto-advance
         if (playerState === YT_PLAYER_STATE.ENDED) {
             dispatch({ type: 'SET_PLAYER_STATE', payload: 'ended' });
-            // Auto-play next video
-            nextVideo();
             return;
         }
 
@@ -153,7 +154,7 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
         } else if (playerState === YT_PLAYER_STATE.BUFFERING) {
             dispatch({ type: 'SET_PLAYER_STATE', payload: 'buffering' });
         }
-    }, [dispatch, nextVideo, sendPlayerAction]);
+    }, [dispatch, sendPlayerAction]); // Removed nextVideo from dependencies
 
     // Handle player errors
     const handleError = useCallback((event: { data: number }) => {
@@ -161,13 +162,14 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
         setError(`${errorMessage} (ID: ${currentVideo?.videoId})`);
         console.error('YouTube Player Error:', event.data, currentVideo?.videoId);
 
-        // If video is not embeddable, skip to next
+        // If video is not embeddable, we might want to auto-skip still?
+        // Or wait for votes? Let's auto-skip on error because it's broken.
         if (event.data === YT_ERROR_CODES.NOT_EMBEDDABLE ||
             event.data === YT_ERROR_CODES.NOT_EMBEDDABLE_2 ||
             event.data === YT_ERROR_CODES.NOT_FOUND ||
             event.data === YT_ERROR_CODES.INVALID_PARAM) {
             setTimeout(() => {
-                nextVideo();
+                nextVideo(); // Keep auto-skip for broken videos
                 setError(null);
             }, 3000);
         }
@@ -226,49 +228,22 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
         return () => clearInterval(interval);
     }, [isReady, dispatch]);
 
-    // Local control handlers
-    const handlePlay = () => {
-        isLocalActionRef.current = true;
-        playerRef.current?.playVideo();
-    };
-
-    const handlePause = () => {
-        isLocalActionRef.current = true;
-        playerRef.current?.pauseVideo();
-    };
-
-    const handleSeek = (time: number) => {
-        if (playerRef.current) {
-            isLocalActionRef.current = true;
-            playerRef.current.seekTo(time, true);
-            sendPlayerAction('seek', time);
-        }
-    };
-
-    const handleSeekInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const time = parseFloat(e.target.value);
-
-        // Debounce seek
-        if (syncTimeoutRef.current) {
-            clearTimeout(syncTimeoutRef.current);
-        }
-
-        setCurrentTime(time);
-
-        syncTimeoutRef.current = setTimeout(() => {
-            handleSeek(time);
-        }, 100);
-    };
-
     return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 h-full">
             {/* Video Container */}
-            <div className="video-container glass-card overflow-hidden" ref={containerRef}>
-                <div id="youtube-player" />
+            <div className="video-container glass-card overflow-hidden relative flex-1" ref={containerRef}>
+                <div id="youtube-player" className="absolute inset-0 w-full h-full" />
+
+                {/* Event overlay to block clicks on iframe if needed, 
+                    but we want standard youtube interactions? 
+                    User said "Remove playback controls". 
+                    If we disable controls in playerVars, user can still click to play/pause in center.
+                    To strictly enforce "no user control", we need a transparent overlay. */}
+                <div className="absolute inset-0 z-0" />
 
                 {/* Error Overlay */}
                 {error && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm z-20">
                         <div className="text-center p-6 max-w-md">
                             <div className="text-red-400 mb-2">
                                 <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -283,73 +258,76 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
 
                 {/* Loading Overlay */}
                 {!isReady && !error && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                         <div className="spinner" />
                     </div>
                 )}
-            </div>
 
-            {/* Controls */}
-            <div className="glass p-4 flex flex-col gap-3">
-                {/* Now Playing */}
-                {currentVideo && (
-                    <div className="flex items-center gap-3">
-                        <div className="flex-1 truncate">
-                            <p className="text-sm text-gray-400">Now Playing</p>
-                            <p className="font-medium truncate">{currentVideo.title}</p>
+                {/* Consensus Controls Overlay */}
+                <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black via-black/60 to-transparent flex flex-col items-center justify-end z-10">
+
+                    {/* Info */}
+                    <div className="w-full mb-4 flex justify-between items-end text-sm">
+                        <div className="text-white/80 font-medium truncate max-w-[70%]">
+                            {currentVideo?.title}
+                        </div>
+                        <div className="text-white/60 font-mono">
+                            {formatDuration(currentTime)} / {formatDuration(duration)}
                         </div>
                     </div>
-                )}
 
-                {/* Progress Bar */}
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-400 w-12 text-right">
-                        {formatDuration(currentTime)}
-                    </span>
-                    <input
-                        type="range"
-                        min={0}
-                        max={duration || 100}
-                        value={currentTime}
-                        onChange={handleSeekInput}
-                        className="flex-1 h-1 bg-gray-700 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                    />
-                    <span className="text-sm text-gray-400 w-12">
-                        {formatDuration(duration)}
-                    </span>
-                </div>
+                    {/* Progress Bar (Visual only) */}
+                    <div className="w-full bg-white/20 h-1.5 rounded-full overflow-hidden mb-6">
+                        <div
+                            className="h-full bg-indigo-500 transition-all duration-1000 ease-linear"
+                            style={{
+                                width: `${(currentTime / (duration || 100)) * 100}%`
+                            }}
+                        />
+                    </div>
 
-                {/* Control Buttons */}
-                <div className="flex items-center justify-center gap-4">
-                    <button
-                        onClick={handlePause}
-                        className="btn btn-secondary btn-icon"
-                        title="Pause"
-                    >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                        </svg>
-                    </button>
-
-                    <button
-                        onClick={handlePlay}
-                        className="btn btn-primary btn-icon w-14 h-14"
-                        title="Play"
-                    >
-                        <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                        </svg>
-                    </button>
-
-                    <button
-                        onClick={() => nextVideo()}
-                        className="btn btn-secondary btn-icon"
-                        title="Next"
-                    >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
-                        </svg>
-                    </button>
+                    {/* Voting Section */}
+                    <div className="flex items-center gap-4">
+                        {state.currentVideoIndex < state.queue.length - 1 ? (
+                            <button
+                                onClick={() => {
+                                    if (!hasVoted) voteNext();
+                                }}
+                                disabled={hasVoted}
+                                className={`
+                                    px-8 py-3 rounded-full font-bold transition-all transform 
+                                    flex items-center gap-3 shadow-xl backdrop-blur-md border border-white/10
+                                    ${hasVoted
+                                        ? 'bg-green-500 text-white cursor-default scale-100'
+                                        : 'bg-indigo-600 hover:bg-indigo-500 hover:scale-105 active:scale-95 text-white'}
+                                `}
+                            >
+                                {hasVoted ? (
+                                    <>
+                                        <svg className="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <span>Waiting for others...</span>
+                                        <span className="bg-white/20 px-2 py-0.5 rounded text-sm ml-1">
+                                            {state.votes.length}/{state.participants.length}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <span>Vote to Play Next ({state.votes.length}/{state.participants.length})</span>
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            <div className="text-gray-400 text-sm font-medium bg-black/60 px-6 py-3 rounded-full backdrop-blur-md border border-white/5">
+                                End of queue
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

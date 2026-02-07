@@ -19,6 +19,7 @@ function getRoom(roomId) {
             participants: [],
             queue: [],
             messages: [],
+            votes: new Set(),
             currentVideoIndex: 0,
             playerState: 'paused',
             currentTime: 0,
@@ -65,6 +66,7 @@ app.prepare().then(() => {
                 participants: room.participants,
                 queue: room.queue,
                 messages: room.messages,
+                votes: Array.from(room.votes),
                 currentVideoIndex: room.currentVideoIndex,
                 playerState: room.playerState,
                 currentTime: room.currentTime,
@@ -157,6 +159,49 @@ app.prepare().then(() => {
             }
 
             io.to(roomId).emit('chat:message', message);
+        });
+
+        // Vote to skip/next
+        socket.on('vote:next', ({ roomId, participantId }) => {
+            const room = getRoom(roomId);
+            if (!participantId) return;
+
+            // Add vote
+            room.votes.add(participantId);
+
+            // Broadcast updated votes
+            io.to(roomId).emit('room:votes-updated', Array.from(room.votes));
+
+            // Check consensus (all participants must vote)
+            if (room.votes.size >= room.participants.length) {
+                // Consensus reached!
+                if (room.currentVideoIndex < room.queue.length - 1) {
+                    // Advance to next video
+                    room.currentVideoIndex++;
+                    room.currentTime = 0;
+                    room.playerState = 'playing';
+
+                    // Clear votes
+                    room.votes.clear();
+
+                    // Notify clients
+                    io.to(roomId).emit('queue:video-changed', room.currentVideoIndex);
+                    io.to(roomId).emit('room:votes-updated', []);
+
+                    // Auto-play next video
+                    io.to(roomId).emit('player:sync', {
+                        action: 'play',
+                        videoTime: 0,
+                        serverTime: Date.now(),
+                        initiator: 'system'
+                    });
+                } else {
+                    // End of queue? Maybe loop or just clear votes?
+                    // For now just clear votes
+                    room.votes.clear();
+                    io.to(roomId).emit('room:votes-updated', []);
+                }
+            }
         });
 
         // Handle disconnection

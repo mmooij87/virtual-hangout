@@ -34,6 +34,7 @@ export interface RoomState {
   participants: Participant[];
   queue: QueueItem[];
   messages: ChatMessage[];
+  votes: string[]; // List of participant IDs who voted next
   currentVideoIndex: number;
   playerState: 'unstarted' | 'playing' | 'paused' | 'buffering' | 'ended';
   currentTime: number;
@@ -55,6 +56,7 @@ type RoomAction =
   | { type: 'REMOVE_FROM_QUEUE'; payload: string }
   | { type: 'ADD_MESSAGE'; payload: ChatMessage }
   | { type: 'SET_MESSAGES'; payload: ChatMessage[] }
+  | { type: 'SET_VOTES'; payload: string[] }
   | { type: 'SET_CURRENT_VIDEO_INDEX'; payload: number }
   | { type: 'SET_PLAYER_STATE'; payload: RoomState['playerState'] }
   | { type: 'SET_CURRENT_TIME'; payload: number }
@@ -66,6 +68,7 @@ const initialState: RoomState = {
   participants: [],
   queue: [],
   messages: [],
+  votes: [],
   currentVideoIndex: 0,
   playerState: 'unstarted',
   currentTime: 0,
@@ -125,6 +128,9 @@ function roomReducer(state: RoomState, action: RoomAction): RoomState {
 
     case 'SET_MESSAGES':
       return { ...state, messages: action.payload };
+
+    case 'SET_VOTES':
+      return { ...state, votes: action.payload };
 
     case 'SET_CURRENT_VIDEO_INDEX':
       return { ...state, currentVideoIndex: action.payload };
