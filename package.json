@@ -15,7 +15,8 @@
     "react-dom": "19.2.3",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "youtube-sr": "^4.3.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
