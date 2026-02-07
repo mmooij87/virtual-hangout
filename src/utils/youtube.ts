@@ -12,6 +12,7 @@ export interface YouTubeVideoInfo {
  * - https://youtu.be/VIDEO_ID
  * - https://www.youtube.com/embed/VIDEO_ID
  * - https://www.youtube.com/v/VIDEO_ID
+ * - https://www.youtube.com/shorts/VIDEO_ID
  */
 export function extractVideoId(url: string): string | null {
     if (!url) return null;
@@ -29,8 +30,8 @@ export function extractVideoId(url: string): string | null {
             const videoId = urlObj.searchParams.get('v');
             if (videoId) return videoId;
 
-            // youtube.com/embed/VIDEO_ID or youtube.com/v/VIDEO_ID
-            const pathMatch = urlObj.pathname.match(/\/(embed|v)\/([a-zA-Z0-9_-]{11})/);
+            // youtube.com/embed/VIDEO_ID or youtube.com/v/VIDEO_ID or youtube.com/shorts/VIDEO_ID
+            const pathMatch = urlObj.pathname.match(/\/(embed|v|shorts)\/([a-zA-Z0-9_-]{11})/);
             if (pathMatch) return pathMatch[2];
         }
 

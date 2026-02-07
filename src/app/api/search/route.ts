@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server';
 // YouTube search using Invidious API (no API key required)
 // Invidious is an open-source YouTube frontend with a public API
 const INVIDIOUS_INSTANCES = [
+    'https://inv.tux.pizza',
+    'https://invidious.projectsegfau.lt',
+    'https://invidious.no-logs.com',
+    'https://invidious.io.lol',
     'https://vid.puffyan.us',
     'https://invidious.snopyta.org',
     'https://yewtu.be',
-    'https://invidious.kavin.rocks',
 ];
 
 interface InvidiousVideo {
@@ -57,7 +60,7 @@ export async function GET(request: Request) {
 
             return NextResponse.json({ videos, instance });
         } catch (error) {
-            console.log(`Instance ${instance} failed, trying next...`);
+            console.log(`Instance ${instance} failed:`, error instanceof Error ? error.message : String(error));
             continue;
         }
     }

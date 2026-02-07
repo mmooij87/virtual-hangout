@@ -89,6 +89,8 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
     const initPlayer = useCallback(() => {
         if (!containerRef.current || playerRef.current) return;
 
+        console.log('Initializing player with video:', currentVideo?.videoId);
+
         playerRef.current = new window.YT.Player('youtube-player', {
             videoId: currentVideo?.videoId || '',
             playerVars: {
@@ -156,22 +158,25 @@ export default function YouTubePlayer({ roomId }: YouTubePlayerProps) {
     // Handle player errors
     const handleError = useCallback((event: { data: number }) => {
         const errorMessage = getYouTubeErrorMessage(event.data);
-        setError(errorMessage);
+        setError(`${errorMessage} (ID: ${currentVideo?.videoId})`);
+        console.error('YouTube Player Error:', event.data, currentVideo?.videoId);
 
         // If video is not embeddable, skip to next
         if (event.data === YT_ERROR_CODES.NOT_EMBEDDABLE ||
             event.data === YT_ERROR_CODES.NOT_EMBEDDABLE_2 ||
-            event.data === YT_ERROR_CODES.NOT_FOUND) {
+            event.data === YT_ERROR_CODES.NOT_FOUND ||
+            event.data === YT_ERROR_CODES.INVALID_PARAM) {
             setTimeout(() => {
                 nextVideo();
                 setError(null);
             }, 3000);
         }
-    }, [nextVideo]);
+    }, [nextVideo, currentVideo?.videoId]);
 
     // Load new video when currentVideo changes
     useEffect(() => {
         if (playerRef.current && currentVideo?.videoId && isReady) {
+            console.log('Loading video:', currentVideo.videoId);
             playerRef.current.loadVideoById(currentVideo.videoId);
             setError(null);
         }
