@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useRoom, Participant, QueueItem } from '@/context/RoomContext';
+import { useRoom, Participant, QueueItem, ChatMessage } from '@/context/RoomContext';
 
 // Server events that clients receive
 interface ServerToClientEvents {
-    'room:joined': (data: { participants: Participant[]; queue: QueueItem[]; currentVideoIndex: number; playerState: string; currentTime: number }) => void;
+    'room:joined': (data: { participants: Participant[]; queue: QueueItem[]; messages: ChatMessage[]; currentVideoIndex: number; playerState: string; currentTime: number }) => void;
     'room:participant-joined': (participant: Participant) => void;
     'room:participant-left': (participantId: string) => void;
     'room:participant-updated': (data: { id: string; updates: Partial<Participant> }) => void;
     'player:sync': (data: { action: 'play' | 'pause' | 'seek'; videoTime: number; serverTime: number; initiator: string }) => void;
     'queue:updated': (queue: QueueItem[]) => void;
     'queue:video-changed': (index: number) => void;
+    'chat:message': (message: ChatMessage) => void;
     'error': (message: string) => void;
 }
 
@@ -25,6 +26,7 @@ interface ClientToServerEvents {
     'queue:add': (data: { roomId: string; item: QueueItem }) => void;
     'queue:remove': (data: { roomId: string; itemId: string }) => void;
     'queue:change-video': (data: { roomId: string; index: number }) => void;
+    'chat:send': (data: { roomId: string; message: ChatMessage }) => void;
 }
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -63,6 +65,7 @@ export function useSocket(roomId: string | null) {
             socket.on('room:joined', (data) => {
                 dispatch({ type: 'SET_PARTICIPANTS', payload: data.participants });
                 dispatch({ type: 'SET_QUEUE', payload: data.queue });
+                dispatch({ type: 'SET_MESSAGES', payload: data.messages || [] });
                 dispatch({ type: 'SET_CURRENT_VIDEO_INDEX', payload: data.currentVideoIndex });
                 dispatch({ type: 'SET_CURRENT_TIME', payload: data.currentTime });
             });
@@ -88,6 +91,11 @@ export function useSocket(roomId: string | null) {
                 dispatch({ type: 'SET_CURRENT_VIDEO_INDEX', payload: index });
             });
 
+            // Chat events
+            socket.on('chat:message', (message) => {
+                dispatch({ type: 'ADD_MESSAGE', payload: message });
+            });
+
             socket.on('error', (message) => {
                 console.error('Socket error:', message);
             });
@@ -95,15 +103,13 @@ export function useSocket(roomId: string | null) {
             isInitializedRef.current = true;
         };
 
-        initSocket();
+        if (!socketRef.current) {
+            initSocket();
+        }
 
         return () => {
-            if (socket) {
-                socket.disconnect();
-                socket = null;
-                socketRef.current = null;
-                isInitializedRef.current = false;
-            }
+            // Don't disconnect on unmount to prevent reconnect loops, handle cleanup differently if needed
+            // checks if we are navigating away from room page
         };
     }, [roomId, dispatch]);
 
@@ -155,6 +161,16 @@ export function useSocket(roomId: string | null) {
         }
     }, [roomId]);
 
+    // Chat actions
+    const sendMessage = useCallback((message: ChatMessage) => {
+        if (socketRef.current && roomId) {
+            socketRef.current.emit('chat:send', { roomId, message });
+            // Optimistically add message? No, wait for server ack usually, but for simple chat optimistic is fine
+            // actually better to wait for broadcast to avoid duplicates if we also listen
+            // or just rely on broadcast.
+        }
+    }, [roomId]);
+
     // Subscribe to player sync events (for YouTube player component)
     const onPlayerSync = useCallback((callback: (data: { action: 'play' | 'pause' | 'seek'; videoTime: number; serverTime: number; initiator: string }) => void) => {
         if (socketRef.current) {
@@ -176,6 +192,7 @@ export function useSocket(roomId: string | null) {
         addToQueue,
         removeFromQueue,
         changeVideo,
+        sendMessage,
         onPlayerSync,
     };
 }

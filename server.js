@@ -18,6 +18,7 @@ function getRoom(roomId) {
         rooms.set(roomId, {
             participants: [],
             queue: [],
+            messages: [],
             currentVideoIndex: 0,
             playerState: 'paused',
             currentTime: 0,
@@ -63,6 +64,7 @@ app.prepare().then(() => {
             socket.emit('room:joined', {
                 participants: room.participants,
                 queue: room.queue,
+                messages: room.messages,
                 currentVideoIndex: room.currentVideoIndex,
                 playerState: room.playerState,
                 currentTime: room.currentTime,
@@ -142,6 +144,19 @@ app.prepare().then(() => {
             room.currentVideoIndex = index;
             room.currentTime = 0;
             io.to(roomId).emit('queue:video-changed', index);
+        });
+
+        // Chat messages
+        socket.on('chat:send', ({ roomId, message }) => {
+            const room = getRoom(roomId);
+            room.messages.push(message);
+
+            // Keep only last 100 messages
+            if (room.messages.length > 100) {
+                room.messages.shift();
+            }
+
+            io.to(roomId).emit('chat:message', message);
         });
 
         // Handle disconnection

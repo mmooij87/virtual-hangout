@@ -20,10 +20,20 @@ export interface QueueItem {
   duration?: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: number;
+  isSystem?: boolean;
+}
+
 export interface RoomState {
   roomId: string | null;
   participants: Participant[];
   queue: QueueItem[];
+  messages: ChatMessage[];
   currentVideoIndex: number;
   playerState: 'unstarted' | 'playing' | 'paused' | 'buffering' | 'ended';
   currentTime: number;
@@ -43,6 +53,8 @@ type RoomAction =
   | { type: 'SET_QUEUE'; payload: QueueItem[] }
   | { type: 'ADD_TO_QUEUE'; payload: QueueItem }
   | { type: 'REMOVE_FROM_QUEUE'; payload: string }
+  | { type: 'ADD_MESSAGE'; payload: ChatMessage }
+  | { type: 'SET_MESSAGES'; payload: ChatMessage[] }
   | { type: 'SET_CURRENT_VIDEO_INDEX'; payload: number }
   | { type: 'SET_PLAYER_STATE'; payload: RoomState['playerState'] }
   | { type: 'SET_CURRENT_TIME'; payload: number }
@@ -53,6 +65,7 @@ const initialState: RoomState = {
   roomId: null,
   participants: [],
   queue: [],
+  messages: [],
   currentVideoIndex: 0,
   playerState: 'unstarted',
   currentTime: 0,
@@ -65,28 +78,28 @@ function roomReducer(state: RoomState, action: RoomAction): RoomState {
   switch (action.type) {
     case 'SET_ROOM_ID':
       return { ...state, roomId: action.payload };
-    
+
     case 'SET_CONNECTED':
       return { ...state, isConnected: action.payload };
-    
+
     case 'SET_LOCAL_PARTICIPANT':
       return { ...state, localParticipant: action.payload };
-    
+
     case 'SET_PARTICIPANTS':
       return { ...state, participants: action.payload };
-    
+
     case 'ADD_PARTICIPANT':
       if (state.participants.find(p => p.id === action.payload.id)) {
         return state;
       }
       return { ...state, participants: [...state.participants, action.payload] };
-    
+
     case 'REMOVE_PARTICIPANT':
       return {
         ...state,
         participants: state.participants.filter(p => p.id !== action.payload),
       };
-    
+
     case 'UPDATE_PARTICIPANT':
       return {
         ...state,
@@ -94,31 +107,37 @@ function roomReducer(state: RoomState, action: RoomAction): RoomState {
           p.id === action.payload.id ? { ...p, ...action.payload.updates } : p
         ),
       };
-    
+
     case 'SET_QUEUE':
       return { ...state, queue: action.payload };
-    
+
     case 'ADD_TO_QUEUE':
       return { ...state, queue: [...state.queue, action.payload] };
-    
+
     case 'REMOVE_FROM_QUEUE':
       return {
         ...state,
         queue: state.queue.filter(item => item.id !== action.payload),
       };
-    
+
+    case 'ADD_MESSAGE':
+      return { ...state, messages: [...state.messages, action.payload] };
+
+    case 'SET_MESSAGES':
+      return { ...state, messages: action.payload };
+
     case 'SET_CURRENT_VIDEO_INDEX':
       return { ...state, currentVideoIndex: action.payload };
-    
+
     case 'SET_PLAYER_STATE':
       return { ...state, playerState: action.payload };
-    
+
     case 'SET_CURRENT_TIME':
       return { ...state, currentTime: action.payload };
-    
+
     case 'SYNC_STATE':
       return { ...state, ...action.payload };
-    
+
     default:
       return state;
   }
