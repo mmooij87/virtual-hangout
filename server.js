@@ -160,7 +160,7 @@ app.prepare().then(() => {
             console.error(err);
             process.exit(1);
         })
-        .listen(port, hostname, () => {
-            console.log(`> Ready on http://${hostname}:${port}`);
+        .listen(port, () => {
+            console.log(`> Ready on port ${port}`);
         });
 });
